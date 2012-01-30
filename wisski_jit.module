@@ -1,0 +1,290 @@
+<?php
+
+function wisski_jit_menu() {
+
+  $items = array();
+  
+  $items['node/%node/graph'] = array(
+   	'title'    => t('Graph'),
+    'page callback' => 'wisski_jit_showGraph',
+    'page arguments' => array(1),
+    'access callback' => 'wisski_loader',
+    'access arguments' => array(1, 'wisski access graph'),
+		'type'     => MENU_LOCAL_TASK,
+  );
+  
+  $items['jit/json/%/%'] = array(
+    'title' => 'Autocomplete',
+    'description' => "Desc",
+    'page callback' => 'wisski_jit_getJson',
+    'page arguments' => array(2),
+    'access callback' => 'user_access',
+    'access arguments' => array('wisski access graph'),
+    'type' => MENU_CALLBACK,
+  );
+	return $items;
+}
+function wisski_jit_getJson($type) {
+  $arguments = arg();
+  $item = $arguments[3];
+  if($arguments[3] == "http:" || $arguments[3] == "https:" || $arguments[3] == "ftp:")
+    $item .= "/";
+  for($i = 4; $i < count($arguments); $i++) {
+    $item .= "/" . $arguments[$i];
+  }
+
+  $item = wisski_store_getObj()->wisski_ARCAdapter_addNamespace(urldecode($item));
+
+  $olditem = wisski_store_getObj()->wisski_ARCAdapter_delNamespace($item);
+
+  if($type == '3') {
+    $query = "SELECT * WHERE { <" . wisski_store_getObj()->wisski_ARCAdapter_delNamespace($item). "> ?p ?o }";
+     
+    $rows = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($query, 'rows');
+    
+    $base = array("id" => wisski_store_getObj()->wisski_ARCAdapter_delNamespace($item), "name" => '<span class="wki-groupname">' . $item . '</span>', "children" => array(), "data" => array("relation" => "<h2>Connections (" . $item . ")</h2><ul></ul>"));    
+    if(count($rows) > 0) { 	   
+      foreach($rows as $row) {
+          
+        $base['data']['relation'] = substr($base['data']['relation'], 0, -5);  
+
+        $base['data']['relation'] = $base['data']['relation'] . (
+           "<li>" . wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['p']) . " &raquo; " . 
+           wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['o']) . "</li></ul>");
+
+        $base['children'][] = array("id" => $row['o'], "name" => wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['o']));
+        $curr = &$base['children'][count($base['children'])-1];
+      
+        if(empty($curr['data']['relation']))
+          $curr['data']['relation'] = ("<h2>Connections (" . wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['o']) .")</h2><ul></ul>");
+          
+        $curr['data']['relation'] = substr($curr['data']['relation'], 0, -5);  
+
+        $curr['data']['relation'] = $curr['data']['relation'] . (
+           "<li>" . wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['s']) . " &raquo; " . 
+           wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['p']) . "</li></ul>");
+      }
+    
+      $query = "SELECT * WHERE { ?s ?p <" . wisski_store_getObj()->wisski_ARCAdapter_delNamespace($item). "> }";
+    
+      $rows = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($query, 'rows');
+    
+      foreach($rows as $row) {
+          
+        $base['data']['relation'] = substr($base['data']['relation'], 0, -5);  
+
+        $base['data']['relation'] = $base['data']['relation'] . (
+           "<li>" . wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['s']) . " &raquo; " . 
+           wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['p']) . "</li></ul>");
+
+        $base['children'][] = array("id" => $row['s'], "name" => wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['s']));
+        $curr = &$base['children'][count($base['children'])-1];
+      
+        if(empty($curr['data']['relation']))
+          $curr['data']['relation'] = ("<h2>Connections (" . wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['s']) .")</h2><ul></ul>");
+          
+        $curr['data']['relation'] = substr($curr['data']['relation'], 0, -5);  
+
+        $curr['data']['relation'] = $curr['data']['relation'] . (
+           "<li>" . wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['p']) . " &raquo; " . 
+           wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['o']) . "</li></ul>");
+      }
+    } else {
+      $query = 'SELECT * WHERE { ?s ?p "' . $item . '" }';
+     
+      $rows = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($query, 'rows');
+    
+      $base = array("id" => $item, "name" => '<span class="wki-groupname">' . $item . '</span>', "children" => array(), "data" => array("relation" => "<h2>Connections (" . $item . ")</h2><ul></ul>"));      
+
+      if(count($rows) > 0) { 	   
+        foreach($rows as $row) {
+          
+          $base['data']['relation'] = substr($base['data']['relation'], 0, -5);  
+
+          $base['data']['relation'] = $base['data']['relation'] . (
+           "<li>" . wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['s']) . " &raquo; " . 
+           wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['p']) . "</li></ul>");
+
+          $base['children'][] = array("id" => $row['s'], "name" => wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['s']));
+        }
+                
+      } else {
+        $base = array();
+                        
+      }
+
+    }
+    
+    $json = json_encode($base);
+      
+    drupal_json($json);
+    return;
+  } else { // case simple or standard
+  
+    include_once('sites/all/modules/wisski_pathbuilder/wisski_pathbuilder.inc');
+    $groupid = wisski_pathbuilder_getGroupIDForIndividual(wisski_store_getObj()->wisski_ARCAdapter_delNamespace($item));
+
+    if(empty($groupid) || $groupid == -1) 
+      return json_encode("\{\}");
+
+    $samepart = _wisski_pathbuilder_calculate_group_samepart($groupid);
+    $sparqlcondition = (" FILTER ( ?x" . (floor(count($samepart)/2)) . " = <" . wisski_store_getObj()->wisski_ARCAdapter_delNamespace($item). "> ) ");
+	
+  	$basename = wisski_pathbuilder_generateGroupName($item, $groupid);
+	
+  	$base = array("id" => (wisski_store_getObj()->wisski_ARCAdapter_delNamespace($item)), "name" => '<span class="wki-groupname">' . $basename . '</span>', "children" => array(), "data" => array("relation" => "<h2>Connections (" . $basename . ")</h2><ul></ul>")); 
+
+    $base = wisski_jit_generateJsonArray($groupid, $base, $sparqlcondition, $type);
+
+    $json = json_encode($base);
+
+    drupal_json($json);  
+    return;
+  }
+}
+
+function wisski_jit_generateJsonArray($groupid, $base = array(), $sparqlcondition, $type = '2') {
+  include_once('sites/all/modules/wisski_pathbuilder/wisski_pathbuilder.inc');
+  $pathIds = wisski_pathbuilder_getMembers($groupid, TRUE);
+
+  $samepart = _wisski_pathbuilder_calculate_group_samepart($groupid);
+
+  foreach($pathIds as $pathid) {
+    $sparql = wisski_pathbuilder_get_sparql($pathid, $sparqlcondition);
+    
+    $pathdata = wisski_pathbuilder_getPathData($pathid);   
+
+    $patharray = unserialize($pathdata['path_array']);
+    
+    $rows = wisski_store_getObj()->wisski_ARCAdapter_getStore()->query($sparql, 'rows');
+
+    if(empty($rows))
+      continue;
+
+    if($pathdata['is_group'])
+      $patharray = _wisski_pathbuilder_calculate_group_samepart($pathid);
+            
+
+    foreach($rows as $row) {
+      $curr = &$base;
+
+      $max = floor(count($patharray)/2);
+      $min = floor(count($samepart)/2) + 1;
+
+      for($i=$min; $i<=$max; $i++) {     
+        $subgroupid = wisski_pathbuilder_getGroupIDForIndividual($row['x' . $i]);
+          
+        $subgroupname = "";
+        if($subgroupid != -1) {
+          if(wisski_pathbuilder_getParentGroup($subgroupid) == 0) {
+            $subgroupname = wisski_pathbuilder_generateGroupName(wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['x' . $i]), $subgroupid);
+            $subgroupname = '<span class="wki-groupname">' . $subgroupname . '</span>';
+          } else {
+            if($type == '1')
+              continue;
+            $subgroupname = wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['x' . $i]);
+          }
+        } else {
+          if($type == '1')
+            continue;
+          $subgroupname = wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['x' . $i]);
+        }
+          $curr['children'][] = array("id" => ($row['x' . $i]), "name" => $subgroupname);
+          if(empty($curr['data']['relation']))
+            $curr['data']['relation'] = ("<h2>Connections (" . wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['x' . ($i-1)]) .")</h2><ul></ul>");
+          
+          $curr['data']['relation'] = substr($curr['data']['relation'], 0, -5);  
+
+          $curr['data']['relation'] = $curr['data']['relation'] . (
+            "<li>" . wisski_store_getObj()->wisski_ARCAdapter_addNamespace($patharray["y" . ($i-1)]) . " &raquo; " . 
+            wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['x' . $i]) . "</li></ul>");
+
+          $curr = &$curr['children'][count($curr['children'])-1];
+          
+          if(empty($curr['data']['relation']))
+            $curr['data']['relation'] = ("<h2>Connections (" . wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['x' . $i]) .")</h2><ul></ul>");
+          
+          $curr['data']['relation'] = substr($curr['data']['relation'], 0, -5);
+          
+          $curr['data']['relation'] = $curr['data']['relation'] . (
+            "<li>" . wisski_store_getObj()->wisski_ARCAdapter_addNamespace($patharray["y" . ($i-1)]) . " &raquo; " .
+            wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['x' . ($i-1)]) . "</li></ul>");
+          if($type == '1') 
+            break;
+      }
+
+      if($subgroupname != "" && $type == '1')
+        continue;
+        
+      if(!$pathdata['is_group']) {
+  
+        $str = mb_substr($row['out'], 0, 15);
+        if(strlen($row['out']) > 15)
+          $str .= '...';
+
+        $curr['children'][] = array("id" => $row['out'],
+          "name" => '<span class="wki-primitive">' . $str . '</span>');
+          
+        if(empty($curr['data']['relation']))
+          $curr['data']['relation'] = ("<h2>Connections (" . wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['x' . ($i-1)]) .")</h2><ul></ul>");
+          
+        $curr['data']['relation'] = substr($curr['data']['relation'], 0, -5);  
+
+        $curr['data']['relation'] = $curr['data']['relation'] . (
+          "<li>" . wisski_store_getObj()->wisski_ARCAdapter_addNamespace($pathdata["datatype_property"]) .  " &raquo; " .
+          $row['out'] . "</li></ul>");
+
+        $curr = &$curr['children'][count($curr['children'])-1];
+          
+        if(empty($curr['data']['relation']))
+          $curr['data']['relation'] = ("<h2>Connections (" . $row['out'] .")</h2><ul></ul>");
+          
+        $curr['data']['relation'] = substr($curr['data']['relation'], 0, -5);
+          
+        $curr['data']['relation'] = $curr['data']['relation'] . (
+          "<li>" . wisski_store_getObj()->wisski_ARCAdapter_addNamespace($pathdata["datatype_property"]) .  " &raquo; " .
+          wisski_store_getObj()->wisski_ARCAdapter_addNamespace($row['x' . ($i-1)]) . "</li></ul>");
+      } else {
+
+        $curr = wisski_jit_generateJsonArray($pathid, $curr, $sparqlcondition
+              . ". FILTER ( ?x" . $max . " = <" . $row['x' . $max] . "> ) ", $type);
+      }
+    }
+  }
+  
+  
+  
+  return $base;
+}
+
+function wisski_jit_showGraph($node) {
+
+  drupal_add_css('sites/all/modules/wisski_jit/wisski_jit.css');
+
+	drupal_add_js('sites/all/modules/wisski_jit/Jit/jit.js');
+	drupal_add_js('sites/all/modules/wisski_jit/wisski_jit.js');
+	drupal_add_js('sites/all/modules/wisski_jit/Jit/Extras/excanvas.js');
+   
+  $out = '<div id="wki-graph">
+            <div id="wki-infocontrol">
+              <select id="wki-infoswitch" size="1">
+                <option value="1">Simple View&nbsp;</option>
+                <option value="2" selected="selected">Standard View&nbsp;</option>
+                <option value="3">Full View&nbsp;</option>
+              </select>
+            </div>
+            <div id="wki-infovis"></div>    
+            <div id="wki-infolist"></div>
+            <div id="wki-infolog"></div>
+          </div>
+          <script>
+            window.onload = function() {
+              init("' . wisski_store_getObj()->wisski_ARCAdapter_delNamespace($node->title) . '");
+            }
+          </script>';
+  return $out;
+}
+
+function wisski_jit_perm() {
+  return array('wisski access graph');
+}

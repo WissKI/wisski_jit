@@ -1,0 +1,7 @@
+; $Id$
+name = WissKI Jit Visualization
+description = A Javascript Infovis Plugin for WissKI
+core = 6.x
+version = 1.0
+package = "WissKI"
+dependencies[] = wisski_pathbuilder
